@@ -1,0 +1,414 @@
+# Gate: Semantic (L2)
+# Rubric-based quality evaluation.
+# Requires LLM evaluation or careful human judgment.
+# This is the deepest level of quality checking.
+
+metadata:
+  name: semantic
+  level: L2
+  version: "1.0.0"
+  description: "Deep quality evaluation using rubrics — checks meaning, not just syntax"
+  estimated_time: "5-15 minutes"
+  fail_policy: "All rubrics must meet threshold. BLOCKER rubric fails stop the pipeline."
+  evaluator: "LLM or Human — cannot be fully automated"
+
+# ============================================================
+# WHEN TO USE
+# ============================================================
+
+when_to_use:
+  required_for:
+    - Work types: [paper, experiment, docs]
+    - File patterns: [spec/*.md]
+    - When: "Claims need verification or logic needs validation"
+  recommended_for:
+    - Work types: [feature, api]
+    - When: "Complex changes with documentation"
+  skip_for:
+    - Work types: [bugfix, refactor]
+    - When: "Pure code changes with no documentation"
+    - Exception: "Unless the bugfix involves complex logic"
+
+# ============================================================
+# EXECUTION CONFIGURATION
+# ============================================================
+
+execution:
+  mode: all_rubrics     # Must evaluate all applicable rubrics
+  fail_fast: false      # Evaluate all, then report
+  require_justification: true  # Each score must have justification
+
+# ============================================================
+# RUBRICS
+# ============================================================
+
+rubrics:
+
+  # ----- EVIDENCE RUBRIC -----
+  - id: SEM-001
+    name: "Evidence Quality"
+    rubric_file: "${KIT}/eval/rubrics/rubric-evidence.md"
+    severity: major
+    threshold: 8  # Out of 12
+    applies_to:
+      files:
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/gemini_analysis.md"
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/claude_impl.md"
+      when: "Documents contain claims about performance, capability, or external systems"
+    criteria:
+      - name: existence
+        weight: 1
+        question: "Does evidence exist for claims made?"
+      - name: relevance
+        weight: 1
+        question: "Does the evidence directly support the specific claim?"
+      - name: freshness
+        weight: 1
+        question: "Is the evidence current and applicable?"
+      - name: reproducibility
+        weight: 1
+        question: "Can someone else generate this evidence?"
+    scoring_guide: |
+      For each criterion, score 0-3:
+      0 = Missing: No evidence whatsoever
+      1 = Weak: Evidence exists but indirect or inaccessible
+      2 = Adequate: Evidence present, relevant, and accessible
+      3 = Strong: Evidence comprehensive, verifiable, and inline
+      
+      Total = sum of all criteria (max 12)
+      Threshold = 8 (Adequate)
+
+  # ----- LOGIC RUBRIC -----
+  - id: SEM-002
+    name: "Logic Quality"
+    rubric_file: "${KIT}/eval/rubrics/rubric-logic.md"
+    severity: blocker  # Logic errors are critical
+    threshold: 8
+    applies_to:
+      files:
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/gemini_analysis.md"
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/codex_plan.md"
+      when: "Documents contain reasoning, design decisions, or conclusions"
+    criteria:
+      - name: definitions
+        weight: 1
+        question: "Are all terms and symbols defined?"
+      - name: consistency
+        weight: 1
+        question: "Is the reasoning internally consistent?"
+      - name: completeness
+        weight: 1
+        question: "Are all steps of reasoning present?"
+      - name: validity
+        weight: 1
+        question: "Do conclusions follow from premises?"
+    scoring_guide: |
+      Common logic errors to watch for:
+      - Non sequitur: Conclusion doesn't follow from premises
+      - Circular reasoning: Using conclusion to prove itself
+      - False dichotomy: Presenting only two options when more exist
+      - Undefined terms: Using jargon without definition
+
+  # ----- CLAIMS RUBRIC -----
+  - id: SEM-003
+    name: "Claims Quality"
+    rubric_file: "${KIT}/eval/rubrics/rubric-claims.md"
+    severity: major
+    threshold: 6  # Lower threshold, more subjective
+    applies_to:
+      files:
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/*.md"
+      when: "Documents make assertions that could be verified or challenged"
+    criteria:
+      - name: traceability
+        weight: 1
+        question: "Can the claim be traced to its origin?"
+      - name: precision
+        weight: 1
+        question: "Is the claim stated precisely?"
+      - name: scope
+        weight: 1
+        question: "Are the claim's boundaries clear?"
+      - name: falsifiability
+        weight: 1
+        question: "Can the claim be tested/verified?"
+
+  # ----- REPRODUCIBILITY RUBRIC -----
+  - id: SEM-004
+    name: "Reproducibility Quality"
+    rubric_file: "${KIT}/eval/rubrics/rubric-repro.md"
+    severity: major
+    threshold: 8
+    applies_to:
+      files:
+        - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs/claude_impl.md"
+      when: "Document describes actions taken or experiments performed"
+    criteria:
+      - name: commands
+        weight: 1
+        question: "Are all commands documented?"
+      - name: environment
+        weight: 1
+        question: "Is the environment specified?"
+      - name: data
+        weight: 1
+        question: "Is input data available?"
+      - name: randomness
+        weight: 1
+        question: "Is randomness controlled?"
+
+# ============================================================
+# CHECKLIST ITEMS
+# ============================================================
+# These specific checklist items are verified via LLM evaluation
+
+checklist_items:
+  - id: CHK-E01
+    instruction: |
+      Scan the document for numeric claims (percentages, counts, measurements).
+      For each one, verify there is an accompanying source reference.
+    pass_if: "Every numeric claim has a source in the same paragraph"
+
+  - id: CHK-E02
+    instruction: |
+      Scan for factual claims about external systems/research.
+      Each must have a citation with version/date.
+    pass_if: "Each factual claim has citation within 1 sentence"
+
+  - id: CHK-L01
+    instruction: |
+      Find all abbreviations and technical terms.
+      Verify each is defined in glossary or on first use.
+    pass_if: "All terms are defined before use"
+
+  - id: CHK-L02
+    instruction: |
+      Check for logical contradictions within the document.
+      Look for conflicting "must/must not" or "always/never" statements.
+    pass_if: "No contradictory statements found"
+
+  - id: CHK-O02
+    instruction: |
+      Verify the output file contains all sections required by its template.
+      Compare headers against the prompt template.
+    pass_if: "All required sections present"
+
+# ============================================================
+# EVALUATION PROCEDURE
+# ============================================================
+
+procedure: |
+  ## Semantic Gate Evaluation Procedure
+  
+  ### Setup
+  1. Set RUN_NAME environment variable
+  2. Ensure all agent outputs exist:
+     - gemini_analysis.md
+     - codex_plan.md
+     - claude_impl.md
+  
+  ### For Each Rubric (SEM-001 through SEM-004):
+  
+  1. **Open the rubric file** (eval/rubrics/rubric-*.md)
+  2. **Open the target document(s)**
+  3. **For each criterion**:
+     a. Read the criterion question
+     b. Search the document for relevant content
+     c. Score 0-3 based on rubric guidance
+     d. Write justification (required)
+  4. **Sum scores** and compare to threshold
+  5. **Record result**: PASS if >= threshold, FAIL otherwise
+  
+  ### For Each Checklist Item:
+  
+  1. Read the instruction
+  2. Scan the document as described
+  3. Determine PASS/FAIL based on pass_if condition
+  4. Record with justification
+  
+  ### Compile Results:
+  
+  1. If any BLOCKER rubric fails → Overall FAIL
+  2. If all BLOCKER rubrics pass → check MAJOR rubrics
+  3. Record all scores in gate_semantic.json
+
+# ============================================================
+# SCORING WORKSHEET TEMPLATE
+# ============================================================
+
+worksheet_template: |
+  # Semantic Gate Scoring Worksheet
+  
+  **Run**: ${RUN_NAME}
+  **Evaluator**: [Name or LLM]
+  **Date**: [YYYY-MM-DD]
+  
+  ---
+  
+  ## Rubric: Evidence (SEM-001)
+  **Target**: claude_impl.md
+  **Threshold**: 8/12
+  
+  | Criterion | Score | Justification |
+  |-----------|-------|---------------|
+  | Existence | /3 | |
+  | Relevance | /3 | |
+  | Freshness | /3 | |
+  | Reproducibility | /3 | |
+  
+  **Total**: /12
+  **Status**: PASS / FAIL
+  
+  ---
+  
+  ## Rubric: Logic (SEM-002)
+  **Target**: gemini_analysis.md, codex_plan.md
+  **Threshold**: 8/12
+  
+  | Criterion | Score | Justification |
+  |-----------|-------|---------------|
+  | Definitions | /3 | |
+  | Consistency | /3 | |
+  | Completeness | /3 | |
+  | Validity | /3 | |
+  
+  **Total**: /12
+  **Status**: PASS / FAIL
+  
+  ---
+  
+  ## Rubric: Claims (SEM-003)
+  **Threshold**: 6/12
+  
+  | Criterion | Score | Justification |
+  |-----------|-------|---------------|
+  | Traceability | /3 | |
+  | Precision | /3 | |
+  | Scope | /3 | |
+  | Falsifiability | /3 | |
+  
+  **Total**: /12
+  **Status**: PASS / FAIL
+  
+  ---
+  
+  ## Rubric: Reproducibility (SEM-004)
+  **Target**: claude_impl.md
+  **Threshold**: 8/12
+  
+  | Criterion | Score | Justification |
+  |-----------|-------|---------------|
+  | Commands | /3 | |
+  | Environment | /3 | |
+  | Data | /3 | |
+  | Randomness | /3 | |
+  
+  **Total**: /12
+  **Status**: PASS / FAIL
+  
+  ---
+  
+  ## Checklist Items
+  
+  | ID | Pass? | Justification |
+  |----|-------|---------------|
+  | CHK-E01 | ✓/✗ | |
+  | CHK-E02 | ✓/✗ | |
+  | CHK-L01 | ✓/✗ | |
+  | CHK-L02 | ✓/✗ | |
+  | CHK-O02 | ✓/✗ | |
+  
+  ---
+  
+  ## Overall Result
+  
+  **BLOCKER Rubrics (must all pass)**:
+  - SEM-002 (Logic): [PASS/FAIL]
+  
+  **MAJOR Rubrics (must mostly pass)**:
+  - SEM-001 (Evidence): [PASS/FAIL]
+  - SEM-003 (Claims): [PASS/FAIL]
+  - SEM-004 (Repro): [PASS/FAIL]
+  
+  **Overall Status**: [PASS / FAIL]
+
+# ============================================================
+# OUTPUT SPECIFICATION
+# ============================================================
+
+output:
+  format: json
+  path: "${KIT}/reports/latest/gate_semantic.json"
+  schema: |
+    {
+      "gate": "semantic",
+      "level": "L2",
+      "run": "<RUN_NAME>",
+      "timestamp": "<ISO8601>",
+      "evaluator": "<name or llm>",
+      "status": "PASS | FAIL",
+      "rubrics": {
+        "evidence": {
+          "scores": {"existence": N, "relevance": N, "freshness": N, "reproducibility": N},
+          "total": N,
+          "threshold": 8,
+          "status": "PASS | FAIL",
+          "justification": ["...", "..."]
+        },
+        "logic": { ... },
+        "claims": { ... },
+        "repro": { ... }
+      },
+      "checklist_items": {
+        "CHK-E01": {"status": "PASS", "justification": "..."},
+        ...
+      },
+      "blockers": [],
+      "summary": "<one-line summary>"
+    }
+
+# ============================================================
+# PASS CRITERIA
+# ============================================================
+
+pass_criteria:
+  all_blocker_rubrics: true  # All BLOCKER-severity rubrics must pass
+  major_rubrics_threshold: 0.75  # At least 75% of MAJOR rubrics must pass
+  checklist_items: all_pass  # All listed checklist items must pass
+
+# ============================================================
+# LLM EVALUATION PROMPT
+# ============================================================
+# Use this prompt if having an LLM evaluate
+
+llm_evaluation_prompt: |
+  You are evaluating documents for semantic quality using standardized rubrics.
+  
+  ## Your Task
+  
+  1. I will provide you with one or more documents to evaluate
+  2. You will score each rubric criterion from 0-3
+  3. You must provide justification for each score
+  4. You will determine PASS/FAIL based on thresholds
+  
+  ## Rubric: Evidence Quality
+  Threshold: 8/12
+  
+  Score each criterion 0-3:
+  - Existence: Does evidence exist for claims?
+  - Relevance: Does evidence directly support claims?
+  - Freshness: Is evidence current?
+  - Reproducibility: Can evidence be regenerated?
+  
+  [Repeat for other rubrics...]
+  
+  ## Output Format
+  
+  Provide your evaluation as structured JSON matching the output schema.
+  Include brief justifications for each score.
+  
+  ## Important
+  
+  - Be objective and consistent
+  - When in doubt, score conservatively
+  - Flag any ambiguities for human review

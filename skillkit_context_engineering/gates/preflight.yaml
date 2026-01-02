@@ -1,0 +1,368 @@
+# Gate: Preflight (L0)
+# Fast, blocker-focused checks run BEFORE any serious work.
+# Designed to catch obvious problems immediately.
+# Should complete in < 1 minute.
+
+metadata:
+  name: preflight
+  level: L0
+  version: "1.0.0"
+  description: "Fast pre-work sanity checks — catch obvious problems immediately"
+  estimated_time: "< 1 minute"
+  fail_policy: "BLOCKER failures halt all work. Fix before proceeding."
+  
+# ============================================================
+# EXECUTION CONFIGURATION
+# ============================================================
+
+execution:
+  mode: sequential      # Stop on first blocker
+  fail_fast: true       # Don't continue if blocker found
+  allow_skip: false     # Cannot skip preflight checks
+  
+# ============================================================
+# CHECKS
+# ============================================================
+
+checks:
+
+  # ----- PRE-001: Kit Installation -----
+  - id: PRE-001
+    name: "Kit specification files exist"
+    description: "Verify the SkillKit is properly installed"
+    type: file_exists
+    severity: blocker
+    targets:
+      - "${KIT}/spec/00_core.md"
+      - "${KIT}/spec/01_constraints.md"
+      - "${KIT}/OPERATOR_GUIDE.md"
+    command: |
+      for f in "${KIT}/spec/00_core.md" "${KIT}/spec/01_constraints.md" "${KIT}/OPERATOR_GUIDE.md"; do
+        if [ ! -f "$f" ]; then
+          echo "FAIL: Missing $f"
+          exit 1
+        fi
+      done
+      echo "PASS: All kit files present"
+    on_fail: "Kit not properly installed. Re-copy skillkit_context_engineering/ to project root."
+    remediation: |
+      1. Verify skillkit_context_engineering/ exists at project root
+      2. Check nothing deleted the spec/ directory
+      3. Re-download kit if needed
+
+  # ----- PRE-002: Run Directory -----
+  - id: PRE-002
+    name: "Run directory and casefile created"
+    description: "Verify the current run is set up correctly"
+    type: file_exists
+    severity: blocker
+    targets:
+      - "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md"
+    command: |
+      if [ -z "${RUN_NAME}" ]; then
+        echo "FAIL: RUN_NAME not set. Export RUN_NAME=YYYY-MM-DD__task-name"
+        exit 1
+      fi
+      if [ ! -f "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md" ]; then
+        echo "FAIL: Casefile not found at ${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md"
+        exit 1
+      fi
+      echo "PASS: Casefile exists"
+    on_fail: "Run directory not created. Create from template first."
+    remediation: |
+      export RUN_NAME="$(date +%Y-%m-%d)__your-task-name"
+      cp -r ${KIT}/ops/RUNS/_TEMPLATE_RUN ${KIT}/ops/RUNS/${RUN_NAME}
+      vim ${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md
+
+  # ----- PRE-003: Output Directory -----
+  - id: PRE-003
+    name: "Output directory structure ready"
+    description: "Verify output directories exist"
+    type: dir_exists
+    severity: blocker
+    targets:
+      - "${KIT}/ops/RUNS/${RUN_NAME}/01_inputs"
+      - "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs"
+    command: |
+      for d in "01_inputs" "02_outputs"; do
+        dir="${KIT}/ops/RUNS/${RUN_NAME}/${d}"
+        if [ ! -d "$dir" ]; then
+          echo "FAIL: Directory $dir missing"
+          exit 1
+        fi
+      done
+      echo "PASS: Output directories ready"
+    on_fail: "Run directory incomplete."
+    remediation: |
+      mkdir -p ${KIT}/ops/RUNS/${RUN_NAME}/{01_inputs,02_outputs}
+
+  # ----- PRE-004: No Secrets -----
+  - id: PRE-004
+    name: "No hardcoded secrets in staged files"
+    description: "Scan for obvious secrets before processing"
+    type: grep
+    severity: blocker
+    patterns:
+      - "(api_key|apikey|password|passwd|secret|token|credential|private_key)\\s*[=:]\\s*['\"][^'\"]{8,}['\"]"
+      - "AKIA[0-9A-Z]{16}"  # AWS Access Key pattern
+      - "sk-[a-zA-Z0-9]{40,}"  # OpenAI API key pattern
+    exclude_paths:
+      - "**/test*"
+      - "**/example*"
+      - "**/*.md"  # Docs may discuss secrets
+      - "**/.env.example"
+    command: |
+      # Scan for common secret patterns
+      FINDINGS=$(grep -rn --include="*.py" --include="*.ts" --include="*.js" --include="*.yaml" \
+        -E "(api_key|password|secret|token)\s*[=:]\s*['\"][^'\"]{8,}['\"]" \
+        . 2>/dev/null | grep -v -E "(test|example|mock|\.env\.example)" | head -5)
+      
+      if [ -n "$FINDINGS" ]; then
+        echo "FAIL: Potential secrets found:"
+        echo "$FINDINGS"
+        exit 1
+      fi
+      echo "PASS: No obvious secrets detected"
+    on_fail: "Secrets detected in code. Remove before proceeding."
+    remediation: |
+      1. Replace hardcoded secret with: os.getenv("SECRET_NAME")
+      2. Add to .env file (not committed)
+      3. Add variable name to .env.example
+      4. Re-run preflight
+
+  # ----- PRE-005: Git Status -----
+  - id: PRE-005
+    name: "Git working directory status"
+    description: "Check for uncommitted changes that might affect the run"
+    type: custom
+    severity: major  # Warning, not blocker
+    command: |
+      if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "INFO: Not a git repository, skipping"
+        exit 0
+      fi
+      
+      UNCOMMITTED=$(git status --porcelain | wc -l)
+      if [ "$UNCOMMITTED" -gt 0 ]; then
+        echo "WARNING: $UNCOMMITTED uncommitted changes"
+        git status --short
+        echo "Consider committing before run for clean baseline"
+        exit 0  # Warning only
+      fi
+      echo "PASS: Working directory clean"
+    on_fail: "N/A (warning only)"
+
+  # ----- PRE-006: Previous Reports Archived -----
+  - id: PRE-006
+    name: "Previous reports archived"
+    description: "Check if latest/ has old reports that should be archived"
+    type: custom
+    severity: major
+    command: |
+      LATEST_DIR="${KIT}/reports/latest"
+      if [ -f "${LATEST_DIR}/summary.md" ]; then
+        # Check if summary is from a different run
+        OLD_RUN=$(grep "Run.*:" "${LATEST_DIR}/summary.md" | head -1 | awk '{print $NF}' | tr -d '`')
+        if [ "$OLD_RUN" != "$RUN_NAME" ] && [ -n "$OLD_RUN" ]; then
+          echo "WARNING: Previous run '$OLD_RUN' reports still in latest/"
+          echo "Consider archiving before proceeding:"
+          echo "  mkdir -p ${KIT}/reports/archive/$(date +%Y-%m-%d)"
+          echo "  mv ${KIT}/reports/latest/*.* ${KIT}/reports/archive/$(date +%Y-%m-%d)/"
+          exit 0  # Warning only
+        fi
+      fi
+      echo "PASS: No conflicting reports in latest/"
+    on_fail: "N/A (warning only)"
+
+  # ----- PRE-007: Casefile Complete -----
+  - id: PRE-007
+    name: "Casefile has required sections"
+    description: "Verify casefile is properly filled out"
+    type: grep
+    severity: blocker
+    target: "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md"
+    command: |
+      CASEFILE="${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md"
+      MISSING=""
+      
+      # Check for key sections
+      for section in "## 1. Objective" "## 3. Scope" "## 4. Constraints"; do
+        if ! grep -q "$section" "$CASEFILE"; then
+          MISSING="$MISSING\n  - $section"
+        fi
+      done
+      
+      # Check objective is not placeholder
+      if grep -q "\[Write here\]" "$CASEFILE"; then
+        MISSING="$MISSING\n  - Objective still has placeholder text"
+      fi
+      
+      if [ -n "$MISSING" ]; then
+        echo "FAIL: Casefile incomplete:$MISSING"
+        exit 1
+      fi
+      echo "PASS: Casefile has required sections"
+    on_fail: "Casefile not fully filled out."
+    remediation: |
+      Open casefile and fill in all [placeholder] sections:
+      vim ${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md
+
+# ============================================================
+# OUTPUT SPECIFICATION
+# ============================================================
+
+output:
+  format: json
+  path: "${KIT}/reports/latest/gate_preflight.json"
+  schema: |
+    {
+      "gate": "preflight",
+      "level": "L0",
+      "run": "<RUN_NAME>",
+      "timestamp": "<ISO8601>",
+      "duration_ms": <milliseconds>,
+      "status": "PASS | FAIL",
+      "checks": [
+        {
+          "id": "PRE-XXX",
+          "name": "<name>",
+          "status": "PASS | FAIL | SKIP",
+          "severity": "blocker | major",
+          "output": "<command output snippet>",
+          "error": "<error message if failed>"
+        }
+      ],
+      "blockers": [<list of failed blocker IDs>],
+      "majors": [<list of failed major IDs>],
+      "summary": "<one-line summary>"
+    }
+
+# ============================================================
+# PASS CRITERIA
+# ============================================================
+
+pass_criteria:
+  blockers: 0           # Zero blocker failures allowed
+  majors: 2             # Up to 2 major warnings allowed
+  
+# ============================================================
+# EXECUTION SCRIPT
+# ============================================================
+
+execution_script: |
+  #!/bin/bash
+  # run_preflight.sh — Execute preflight gate
+  # Usage: ./run_preflight.sh <RUN_NAME>
+  # Requires: KIT environment variable set to skillkit path
+  
+  set -e
+  
+  RUN_NAME="${1:-}"
+  KIT="${KIT:-skillkit_context_engineering}"
+  
+  if [ -z "$RUN_NAME" ]; then
+    echo "Usage: $0 <RUN_NAME>"
+    echo "Example: $0 2026-01-02__add-auth"
+    exit 1
+  fi
+  
+  export RUN_NAME KIT
+  
+  echo "════════════════════════════════════════"
+  echo "  PREFLIGHT GATE (L0)"
+  echo "  Run: $RUN_NAME"
+  echo "════════════════════════════════════════"
+  
+  BLOCKERS=0
+  MAJORS=0
+  RESULTS=""
+  
+  # PRE-001: Kit files
+  echo -n "PRE-001 Kit files... "
+  if [ -f "${KIT}/spec/00_core.md" ] && [ -f "${KIT}/spec/01_constraints.md" ]; then
+    echo "✓ PASS"
+    RESULTS="${RESULTS}{\"id\":\"PRE-001\",\"status\":\"PASS\"},"
+  else
+    echo "✗ FAIL [BLOCKER]"
+    BLOCKERS=$((BLOCKERS + 1))
+    RESULTS="${RESULTS}{\"id\":\"PRE-001\",\"status\":\"FAIL\"},"
+  fi
+  
+  # PRE-002: Casefile
+  echo -n "PRE-002 Casefile...  "
+  if [ -f "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md" ]; then
+    echo "✓ PASS"
+    RESULTS="${RESULTS}{\"id\":\"PRE-002\",\"status\":\"PASS\"},"
+  else
+    echo "✗ FAIL [BLOCKER]"
+    BLOCKERS=$((BLOCKERS + 1))
+    RESULTS="${RESULTS}{\"id\":\"PRE-002\",\"status\":\"FAIL\"},"
+  fi
+  
+  # PRE-003: Output dirs
+  echo -n "PRE-003 Output dirs. "
+  if [ -d "${KIT}/ops/RUNS/${RUN_NAME}/01_inputs" ] && [ -d "${KIT}/ops/RUNS/${RUN_NAME}/02_outputs" ]; then
+    echo "✓ PASS"
+    RESULTS="${RESULTS}{\"id\":\"PRE-003\",\"status\":\"PASS\"},"
+  else
+    echo "✗ FAIL [BLOCKER]"
+    BLOCKERS=$((BLOCKERS + 1))
+    RESULTS="${RESULTS}{\"id\":\"PRE-003\",\"status\":\"FAIL\"},"
+  fi
+  
+  # PRE-004: Secrets
+  echo -n "PRE-004 Secrets...   "
+  SECRETS=$(grep -rn --include="*.py" --include="*.ts" \
+    -E "(password|secret)\s*=\s*['\"][^'\"]{8,}['\"]" . 2>/dev/null | \
+    grep -v test | grep -v example | wc -l)
+  if [ "$SECRETS" -eq 0 ]; then
+    echo "✓ PASS"
+    RESULTS="${RESULTS}{\"id\":\"PRE-004\",\"status\":\"PASS\"},"
+  else
+    echo "✗ FAIL [BLOCKER] ($SECRETS potential secrets found)"
+    BLOCKERS=$((BLOCKERS + 1))
+    RESULTS="${RESULTS}{\"id\":\"PRE-004\",\"status\":\"FAIL\"},"
+  fi
+  
+  # PRE-007: Casefile complete
+  echo -n "PRE-007 Casefile ok. "
+  if grep -q "## 1. Objective" "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md" && \
+     ! grep -q "\[Write here\]" "${KIT}/ops/RUNS/${RUN_NAME}/00_casefile.md"; then
+    echo "✓ PASS"
+    RESULTS="${RESULTS}{\"id\":\"PRE-007\",\"status\":\"PASS\"}"
+  else
+    echo "✗ FAIL [BLOCKER]"
+    BLOCKERS=$((BLOCKERS + 1))
+    RESULTS="${RESULTS}{\"id\":\"PRE-007\",\"status\":\"FAIL\"}"
+  fi
+  
+  echo "════════════════════════════════════════"
+  
+  # Determine overall status
+  if [ "$BLOCKERS" -eq 0 ]; then
+    STATUS="PASS"
+    echo "Result: ✓ PASS (0 blockers, $MAJORS warnings)"
+  else
+    STATUS="FAIL"
+    echo "Result: ✗ FAIL ($BLOCKERS blockers)"
+  fi
+  
+  # Write JSON output
+  cat > "${KIT}/reports/latest/gate_preflight.json" << EOF
+  {
+    "gate": "preflight",
+    "level": "L0",
+    "run": "${RUN_NAME}",
+    "timestamp": "$(date -Iseconds)",
+    "status": "${STATUS}",
+    "checks": [${RESULTS}],
+    "blockers_count": ${BLOCKERS},
+    "majors_count": ${MAJORS},
+    "summary": "${BLOCKERS} blockers, ${MAJORS} warnings"
+  }
+  EOF
+  
+  echo "Output: ${KIT}/reports/latest/gate_preflight.json"
+  
+  # Exit with failure if blockers found
+  [ "$BLOCKERS" -eq 0 ] || exit 1

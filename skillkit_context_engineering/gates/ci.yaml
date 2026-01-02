@@ -1,0 +1,100 @@
+# Gate: CI (L1)
+# Build and test checks.
+# For manual operation, run these commands and record results.
+
+metadata:
+  name: ci
+  level: L1
+  version: "1.0.0"
+  description: "Build, test, and basic quality checks"
+  estimated_time: "1-5 minutes (depends on project)"
+  
+execution:
+  mode: parallel  # Run all checks
+  fail_fast: false
+  
+checks:
+  - id: CI-001
+    name: "Syntax check (Python)"
+    type: command
+    command: "python -m py_compile ${FILE}"
+    targets:
+      file_pattern: "**/*.py"
+    severity: blocker
+    on_fail: "Syntax error in Python file"
+    evidence: "stdout/stderr"
+    
+  - id: CI-002
+    name: "Type check (Python)"
+    type: command
+    command: "mypy --ignore-missing-imports ${FILE}"
+    targets:
+      file_pattern: "**/*.py"
+    severity: major
+    on_fail: "Type errors found"
+    evidence: "stdout"
+    optional: true  # May not have mypy installed
+    
+  - id: CI-003
+    name: "Lint (Python)"
+    type: command
+    command: "ruff check ${FILE}"
+    targets:
+      file_pattern: "**/*.py"
+    severity: minor
+    on_fail: "Lint warnings"
+    evidence: "stdout"
+    optional: true
+    
+  - id: CI-004
+    name: "Unit tests pass"
+    type: command
+    command: "pytest tests/ -v --tb=short"
+    severity: blocker
+    on_fail: "Tests failing"
+    evidence: "stdout"
+    timeout_seconds: 300
+    
+  - id: CI-005
+    name: "TypeScript compile"
+    type: command
+    command: "npx tsc --noEmit"
+    targets:
+      file_pattern: "**/*.ts"
+    severity: blocker
+    on_fail: "TypeScript compile errors"
+    evidence: "stdout"
+    optional: true
+    
+  - id: CI-006
+    name: "Build succeeds"
+    type: command
+    command: "make build || npm run build || echo 'No build command'"
+    severity: blocker
+    on_fail: "Build failed"
+    evidence: "stdout"
+
+# Manual execution instructions (for operators without automation)
+manual_instructions: |
+  Run the following commands and record results:
+  
+  1. Python syntax check:
+     find . -name "*.py" -exec python -m py_compile {} \;
+  
+  2. Run tests:
+     pytest tests/ -v 2>&1 | tee test_output.log
+  
+  3. Build project:
+     make build 2>&1 | tee build_output.log
+  
+  4. Record results:
+     Save logs to: skillkit_context_engineering/ops/RUNS/<run>/01_inputs/
+     Update: skillkit_context_engineering/reports/latest/gate_ci.json
+
+output:
+  format: json
+  path: "skillkit_context_engineering/reports/latest/gate_ci.json"
+  
+pass_criteria:
+  blockers: 0
+  majors: 3  # Some flexibility for major issues

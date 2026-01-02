@@ -1,0 +1,32 @@
+# Pack: Documentation
+# Checks for documentation-heavy work.
+
+metadata:
+  name: pack-docs
+  version: "1.0.0"
+  description: "Checks for documentation tasks"
+  severity_filter: [blocker, major, minor]
+
+include_items:
+  # Evidence
+  - CHK-E01  # Numeric claims have data source
+  - CHK-E02  # Factual claims are cited
+  - CHK-E03  # Visual claims have screenshots
+  
+  # Logic
+  - CHK-L01  # Terms are defined
+  - CHK-L02  # No contradictions
+  - CHK-L04  # Conclusions follow premises
+  
+  # Output
+  - CHK-O02  # Output follows format
+  - CHK-O03  # No TODO-only stubs
+  
+  # Documentation
+  - CHK-D01  # Functions have docstrings
+  - CHK-D02  # README is current
+
+total_items: 10
+blockers: 4
+majors: 4
+minors: 2

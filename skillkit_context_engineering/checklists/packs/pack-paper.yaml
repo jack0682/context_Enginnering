@@ -1,0 +1,34 @@
+# Pack: Paper
+# Checks for academic paper writing.
+
+metadata:
+  name: pack-paper
+  version: "1.0.0"
+  description: "Checks for academic papers and reports"
+  severity_filter: [blocker, major, minor]
+
+include_items:
+  # Evidence (all)
+  - CHK-E01  # Numeric claims have data source
+  - CHK-E02  # Factual claims are cited
+  - CHK-E03  # Visual claims have screenshots
+  - CHK-E04  # Benchmark results are reproducible
+  
+  # Logic (all)
+  - CHK-L01  # Terms are defined
+  - CHK-L02  # No contradictions
+  - CHK-L04  # Conclusions follow premises
+  
+  # Reproducibility
+  - CHK-R01  # All actions are commands
+  - CHK-R02  # Environment is documented
+  - CHK-R03  # Random seeds are fixed
+  
+  # Output
+  - CHK-O02  # Output follows format
+  - CHK-O03  # No TODO-only stubs
+
+total_items: 12
+blockers: 5
+majors: 6
+minors: 1

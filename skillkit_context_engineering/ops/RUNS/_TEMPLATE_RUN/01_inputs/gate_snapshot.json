@@ -1,0 +1,10 @@
+{
+  "description": "Snapshot of previous gate results for reference",
+  "generated_at": null,
+  "gates": {
+    "preflight": null,
+    "ci": null,
+    "semantic": null
+  },
+  "instructions": "This file is optional. Use it to carry forward gate results from a previous run if continuing work."
+}

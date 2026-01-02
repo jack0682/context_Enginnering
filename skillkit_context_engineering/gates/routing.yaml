@@ -1,0 +1,327 @@
+# Gate: Routing
+# Maps file patterns and work types to recommended gates and packs.
+# Use this table to determine which gates and packs to apply for your run.
+
+metadata:
+  name: routing
+  version: "1.0.0"
+  description: "Decision table for gate and pack selection"
+  usage: |
+    1. Identify changed files in your run (from codex_plan.md)
+    2. Look up file patterns below
+    3. Identify work type from casefile
+    4. Look up work type
+    5. Union all gates and packs
+    6. Execute in order: preflight → ci → semantic
+
+# ============================================================
+# FILE PATTERN ROUTES
+# ============================================================
+# Rules evaluated in order; collect all matching rules.
+
+file_pattern_routes:
+
+  # ----- PYTHON FILES -----
+  - patterns: ["*.py", "**/*.py"]
+    exclude: ["**/test_*.py", "**/*_test.py"]
+    gates:
+      required: [preflight, ci]
+      optional: [semantic]
+    packs: [pack-core]
+    checks:
+      always: [CHK-S01, CHK-T02]  # No secrets, tests pass
+      if_new: [CHK-T01]           # New code needs tests
+    notes: "Standard Python source files"
+
+  - patterns: ["**/test_*.py", "**/*_test.py", "tests/**/*.py"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      always: [CHK-T02, CHK-T03]
+    notes: "Test files"
+
+  # ----- TYPESCRIPT/JAVASCRIPT -----
+  - patterns: ["*.ts", "*.tsx", "*.js", "*.jsx"]
+    exclude: ["*.test.ts", "*.spec.ts"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      always: [CHK-S01]
+    notes: "TypeScript/JavaScript source files"
+
+  # ----- DOCUMENTATION -----
+  - patterns: ["*.md"]
+    exclude: ["README.md", "CHANGELOG.md", "LICENSE.md"]
+    gates:
+      required: [preflight]
+      optional: [semantic]
+    packs: [pack-docs]
+    checks:
+      always: [CHK-E01, CHK-E02, CHK-L01]  # Evidence, citations, terms
+    notes: "Markdown documentation"
+
+  - patterns: ["README.md"]
+    gates:
+      required: [preflight]
+    packs: [pack-core]
+    checks:
+      always: [CHK-D02]  # README is current
+    notes: "Project README — critical for onboarding"
+
+  # ----- SPECIFICATIONS -----
+  - patterns: ["spec/*.md", "spec/**/*.md"]
+    gates:
+      required: [preflight, semantic]
+    packs: [pack-core, pack-docs]
+    checks:
+      always: [CHK-L01, CHK-L02, CHK-X03]  # Terms, no contradictions, approval
+    notes: "Specification files — require semantic review"
+
+  # ----- CONFIGURATION -----
+  - patterns: ["*.yaml", "*.yml", "*.json"]
+    exclude: ["package-lock.json", "**/node_modules/**"]
+    gates:
+      required: [preflight]
+    packs: [pack-core]
+    checks:
+      always: [CHK-S01]  # No secrets
+    notes: "Configuration files"
+
+  # ----- DEPENDENCIES -----
+  - patterns: ["requirements*.txt", "Pipfile", "pyproject.toml"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      always: [CHK-R04]  # Dependencies locked
+    notes: "Python dependency files"
+
+  - patterns: ["package.json", "package-lock.json", "yarn.lock"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      always: [CHK-R04]
+    notes: "Node.js dependency files"
+
+  # ----- ROS2 SPECIFIC -----
+  - patterns: ["*.msg", "*.srv", "*.action"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-ros2]
+    checks:
+      always: [CHK-C01, CHK-C02]  # Interface docs, version bump
+    notes: "ROS2 interface definitions"
+
+  - patterns: ["package.xml", "**/CMakeLists.txt"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-ros2]
+    notes: "ROS2 package configuration"
+
+  # ----- BUILD/CI FILES -----
+  - patterns: [".github/**/*.yml", ".gitlab-ci.yml", "Jenkinsfile"]
+    gates:
+      required: [preflight]
+    packs: [pack-core]
+    checks:
+      always: [CHK-S01]
+    notes: "CI/CD configuration"
+
+  - patterns: ["Dockerfile", "docker-compose*.yml"]
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    notes: "Container configuration"
+
+# ============================================================
+# WORK TYPE ROUTES
+# ============================================================
+# Based on casefile work_type field.
+
+work_type_routes:
+
+  - type: feature
+    description: "New feature development"
+    gates:
+      required: [preflight, ci]
+      recommended: [semantic]
+    packs: [pack-core]
+    checks:
+      required: [CHK-C01, CHK-T01, CHK-X02]
+    verification:
+      - "Unit tests for new code"
+      - "Integration test if cross-module"
+      - "Interface docs if public API"
+
+  - type: bugfix
+    description: "Bug fix"
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      required: [CHK-T01, CHK-T02, CHK-R01]
+    verification:
+      - "Regression test that fails before, passes after"
+      - "Root cause documented in impl log"
+
+  - type: refactor
+    description: "Code refactoring without behavior change"
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      required: [CHK-T02, CHK-X01]  # Tests pass, impact analysis
+    verification:
+      - "All tests pass (behavior unchanged)"
+      - "No new functionality (verify via diff review)"
+
+  - type: docs
+    description: "Documentation updates"
+    gates:
+      required: [preflight]
+      recommended: [semantic]
+    packs: [pack-docs]
+    checks:
+      required: [CHK-E01, CHK-E02, CHK-L01, CHK-D02]
+    verification:
+      - "Links work"
+      - "Terms defined"
+      - "No contradictions with code"
+
+  - type: paper
+    description: "Academic paper or research report"
+    gates:
+      required: [preflight, semantic]
+    packs: [pack-paper]
+    checks:
+      required: [CHK-E01, CHK-E02, CHK-E04, CHK-L04, CHK-R01, CHK-R02, CHK-R03]
+    verification:
+      - "All rubrics score ≥ threshold"
+      - "Experiments reproducible"
+      - "Citations complete"
+
+  - type: experiment
+    description: "Research experiment or proof of concept"
+    gates:
+      required: [preflight]
+      recommended: [semantic]
+    packs: [pack-paper]
+    checks:
+      required: [CHK-R01, CHK-R02, CHK-R03, CHK-E04]
+    verification:
+      - "Reproducible with documented commands"
+      - "Seeds specified"
+      - "Results recorded"
+
+  - type: api
+    description: "API or interface changes"
+    gates:
+      required: [preflight, ci]
+    packs: [pack-core]
+    checks:
+      required: [CHK-C01, CHK-C02, CHK-C03]
+    verification:
+      - "Interface docs updated first"
+      - "Version bump if breaking"
+      - "Examples provided"
+
+  - type: security
+    description: "Security-related changes"
+    gates:
+      required: [preflight, ci, semantic]
+    packs: [pack-core]
+    checks:
+      required: [CHK-S01, CHK-S02, CHK-T02]
+    verification:
+      - "Security review completed"
+      - "No secrets in code"
+      - "Input validation verified"
+
+# ============================================================
+# DEFAULT ROUTE
+# ============================================================
+
+default:
+  gates:
+    required: [preflight]
+  packs: [pack-core]
+  checks:
+    always: [CHK-S01, CHK-O01, CHK-O02]
+  notes: "Applied when no other pattern matches"
+
+# ============================================================
+# ROUTING DECISION PROCEDURE
+# ============================================================
+
+procedure: |
+  To determine gates and packs for a run:
+  
+  1. EXTRACT changed files from Codex plan (Section 2)
+     ```bash
+     grep -E "^\| [0-9]+ \|" codex_plan.md | awk -F'|' '{print $3}' | tr -d ' '
+     ```
+  
+  2. MATCH each file against file_pattern_routes
+     - Collect gates and packs from all matching rules
+     - Check exclude patterns (skip if excluded)
+  
+  3. GET work type from casefile (Section Metadata)
+     ```bash
+     grep "Work Type" 00_casefile.md | awk -F'|' '{print $3}'
+     ```
+  
+  4. LOOKUP work type in work_type_routes
+     - Add gates and packs from work type
+  
+  5. DEDUPLICATE and ORDER
+     - Remove duplicate gates/packs
+     - Order gates: preflight → ci → semantic
+     - Order packs by: pack-core first, then others
+  
+  6. EXECUTE in order
+     - Only proceed to next gate if current passes
+
+# ============================================================
+# QUICK REFERENCE MATRIX
+# ============================================================
+
+quick_reference:
+  #                        | Preflight | CI | Semantic | Special Checks
+  # -----------------------+-----------+----+----------+----------------
+  # feature (Python)       |     ✓     | ✓  |    ○     | CHK-C01, CHK-T01
+  # bugfix                 |     ✓     | ✓  |    -     | CHK-T01, CHK-T02
+  # refactor               |     ✓     | ✓  |    -     | CHK-T02, CHK-X01
+  # docs                   |     ✓     | -  |    ○     | CHK-E01, CHK-L01
+  # paper                  |     ✓     | -  |    ✓     | All E, L, R checks
+  # api                    |     ✓     | ✓  |    -     | CHK-C01-03
+  # security               |     ✓     | ✓  |    ✓     | CHK-S01, CHK-S02
+  #
+  # Legend: ✓ = required, ○ = recommended, - = optional
+
+# ============================================================
+# EXAMPLE ROUTING
+# ============================================================
+
+example:
+  scenario: "Adding JWT authentication (feature type, Python files)"
+  changed_files:
+    - src/auth/__init__.py           # → pack-core, CHK-T01
+    - src/auth/jwt.py                # → pack-core, CHK-S01
+    - src/api/routes.py              # → pack-core (existing)
+    - tests/test_auth.py             # → pack-core (tests)
+    - docs/api.md                    # → pack-docs
+  
+  work_type: feature
+  
+  resolution:
+    gates: [preflight, ci]           # From work_type + file patterns
+    packs: [pack-core, pack-docs]    # Union of all matches
+    checks:
+      - CHK-S01 (always for Python)
+      - CHK-T01 (new code)
+      - CHK-T02 (tests pass)
+      - CHK-C01 (new API, interface docs)
+      - CHK-E01 (for docs/api.md)

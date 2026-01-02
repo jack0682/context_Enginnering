@@ -1,0 +1,482 @@
+# Checklist Database
+# Each item is an atomic, testable quality check.
+# ID format: CHK-[CATEGORY][NUMBER]
+
+metadata:
+  version: "1.0.0"
+  last_updated: "2026-01-02"
+  total_items: 30
+
+items:
+  # ============================================================
+  # EVIDENCE (CHK-E*): Claims must have supporting evidence
+  # ============================================================
+  - id: CHK-E01
+    title: Numeric claims have data source
+    category: evidence
+    severity: blocker
+    trigger:
+      file_patterns: ["*.md", "*.rst", "*.txt"]
+      work_types: ["docs", "paper", "report"]
+    method: llm
+    pass_condition: >
+      Every numeric claim (percentage, count, measurement) is accompanied
+      by a reference to a data source file, command output, or citation.
+    evidence:
+      type: screenshot_or_excerpt
+      save_to: "reports/latest/evidence_check.md"
+    related_constraints: [CON-001]
+
+  - id: CHK-E02
+    title: Factual claims are cited
+    category: evidence
+    severity: blocker
+    trigger:
+      file_patterns: ["*.md"]
+      work_types: ["docs", "paper"]
+    method: llm
+    pass_condition: >
+      Every factual claim about external systems, libraries, or research
+      includes a citation with version/date.
+    evidence:
+      type: citation_list
+      save_to: "reports/latest/citations_verified.json"
+    related_constraints: [CON-002]
+
+  - id: CHK-E03
+    title: Visual claims have screenshots
+    category: evidence
+    severity: major
+    trigger:
+      file_patterns: ["*.md"]
+      work_types: ["ui", "demo"]
+    method: manual
+    pass_condition: >
+      Claims about UI appearance or visual output are accompanied by
+      screenshot files in ops/RUNS/<run>/01_inputs/.
+    evidence:
+      type: file_list
+      save_to: "reports/latest/screenshots.json"
+    related_constraints: [CON-003]
+
+  - id: CHK-E04
+    title: Benchmark results are reproducible
+    category: evidence
+    severity: major
+    trigger:
+      file_patterns: ["*.md", "*.json"]
+      work_types: ["benchmark", "perf"]
+    method: manual
+    pass_condition: >
+      Performance claims reference a reproducible command and include
+      environment specification.
+    evidence:
+      type: command_log
+      save_to: "reports/latest/benchmark_log.txt"
+    related_constraints: [CON-001, CON-020]
+
+  # ============================================================
+  # CONTRACT (CHK-C*): Interface and API stability
+  # ============================================================
+  - id: CHK-C01
+    title: Interface docs updated before code
+    category: contract
+    severity: blocker
+    trigger:
+      file_patterns: ["spec/02_interfaces.md"]
+      work_types: ["api", "interface"]
+    method: auto
+    pass_condition: >
+      If code changes a public interface, 02_interfaces.md was updated
+      in the same commit or earlier.
+    evidence:
+      type: git_log
+      save_to: "reports/latest/interface_commits.txt"
+    related_constraints: [CON-010]
+
+  - id: CHK-C02
+    title: Breaking changes bump major version
+    category: contract
+    severity: major
+    trigger:
+      file_patterns: ["*"]
+      work_types: ["api", "release"]
+    method: manual
+    pass_condition: >
+      Any breaking change (removed field, changed type, renamed function)
+      increments the major version number.
+    evidence:
+      type: version_diff
+      save_to: "reports/latest/version_check.txt"
+    related_constraints: [CON-011]
+
+  - id: CHK-C03
+    title: New interfaces have examples
+    category: contract
+    severity: major
+    trigger:
+      file_patterns: ["spec/02_interfaces.md"]
+      work_types: ["api"]
+    method: llm
+    pass_condition: >
+      Every new interface definition includes at least one usage example.
+    evidence:
+      type: excerpt
+      save_to: "reports/latest/interface_examples.md"
+    related_constraints: [CON-012]
+
+  - id: CHK-C04
+    title: Deprecations are announced
+    category: contract
+    severity: minor
+    trigger:
+      file_patterns: ["*"]
+      work_types: ["api", "release"]
+    method: manual
+    pass_condition: >
+      Deprecated items have deprecation notices with timeline.
+    evidence:
+      type: search_result
+      save_to: "reports/latest/deprecations.txt"
+    related_constraints: []
+
+  # ============================================================
+  # REPRODUCIBILITY (CHK-R*): Actions can be repeated
+  # ============================================================
+  - id: CHK-R01
+    title: All actions are commands
+    category: reproducibility
+    severity: blocker
+    trigger:
+      file_patterns: ["ops/RUNS/*/02_outputs/*.md"]
+      work_types: ["all"]
+    method: llm
+    pass_condition: >
+      Every modification described in implementation logs is captured
+      as a repeatable command or script, not manual editing.
+    evidence:
+      type: command_list
+      save_to: "reports/latest/commands.txt"
+    related_constraints: [CON-020]
+
+  - id: CHK-R02
+    title: Environment is documented
+    category: reproducibility
+    severity: major
+    trigger:
+      file_patterns: ["ops/RUNS/*/00_casefile.md"]
+      work_types: ["setup", "build"]
+    method: llm
+    pass_condition: >
+      Environment details (OS, language version, key dependencies)
+      are documented in casefile or notes.
+    evidence:
+      type: env_spec
+      save_to: "reports/latest/environment.txt"
+    related_constraints: [CON-021]
+
+  - id: CHK-R03
+    title: Random seeds are fixed
+    category: reproducibility
+    severity: minor
+    trigger:
+      file_patterns: ["*.py", "*.yaml"]
+      work_types: ["ml", "experiment"]
+    method: auto
+    pass_condition: >
+      Code using random operations sets a fixed seed or logs the seed used.
+    evidence:
+      type: grep_result
+      save_to: "reports/latest/seeds.txt"
+    related_constraints: [CON-022]
+
+  - id: CHK-R04
+    title: Dependencies are locked
+    category: reproducibility
+    severity: major
+    trigger:
+      file_patterns: ["requirements.txt", "package.json", "Cargo.toml"]
+      work_types: ["setup"]
+    method: auto
+    pass_condition: >
+      Dependency files pin versions (not ranges) or a lockfile exists.
+    evidence:
+      type: file_check
+      save_to: "reports/latest/deps_locked.txt"
+    related_constraints: [CON-021]
+
+  # ============================================================
+  # LOGIC (CHK-L*): Reasoning quality
+  # ============================================================
+  - id: CHK-L01
+    title: Terms are defined
+    category: logic
+    severity: blocker
+    trigger:
+      file_patterns: ["*.md", "*.rst"]
+      work_types: ["docs", "spec"]
+    method: llm
+    pass_condition: >
+      All abbreviations and technical terms are defined in glossary
+      or on first use.
+    evidence:
+      type: term_list
+      save_to: "reports/latest/undefined_terms.txt"
+    related_constraints: [CON-030]
+
+  - id: CHK-L02
+    title: No contradictions
+    category: logic
+    severity: blocker
+    trigger:
+      file_patterns: ["spec/*.md"]
+      work_types: ["spec"]
+    method: llm
+    pass_condition: >
+      No two statements in the same or related documents contradict
+      each other.
+    evidence:
+      type: conflict_check
+      save_to: "reports/latest/contradictions.md"
+    related_constraints: [CON-031]
+
+  - id: CHK-L03
+    title: No circular dependencies
+    category: logic
+    severity: major
+    trigger:
+      file_patterns: ["*.py", "*.ts", "*.cpp"]
+      work_types: ["code"]
+    method: auto
+    pass_condition: >
+      Import graph has no cycles (or cycles are documented and intentional).
+    evidence:
+      type: dep_graph
+      save_to: "reports/latest/dep_cycles.txt"
+    related_constraints: [CON-032]
+
+  - id: CHK-L04
+    title: Conclusions follow premises
+    category: logic
+    severity: major
+    trigger:
+      file_patterns: ["*.md"]
+      work_types: ["analysis", "paper"]
+    method: llm
+    pass_condition: >
+      Each stated conclusion logically follows from the stated premises.
+    evidence:
+      type: logic_audit
+      save_to: "reports/latest/logic_audit.md"
+    related_constraints: []
+
+  # ============================================================
+  # CHANGE (CHK-X*): Change management
+  # ============================================================
+  - id: CHK-X01
+    title: Impact analysis for large changes
+    category: change
+    severity: blocker
+    trigger:
+      file_patterns: ["ops/RUNS/*/00_casefile.md"]
+      work_types: ["refactor", "architecture"]
+    method: llm
+    pass_condition: >
+      Changes affecting 3+ modules include impact analysis section.
+    evidence:
+      type: casefile_section
+      save_to: "reports/latest/impact_analysis.md"
+    related_constraints: [CON-040]
+
+  - id: CHK-X02
+    title: Rollback plan exists
+    category: change
+    severity: major
+    trigger:
+      file_patterns: ["ops/RUNS/*/02_outputs/codex_plan.md"]
+      work_types: ["all"]
+    method: llm
+    pass_condition: >
+      Implementation plan includes rollback section with specific commands.
+    evidence:
+      type: excerpt
+      save_to: "reports/latest/rollback_plan.md"
+    related_constraints: [CON-041]
+
+  - id: CHK-X03
+    title: Spec changes are approved
+    category: change
+    severity: major
+    trigger:
+      file_patterns: ["spec/*.md"]
+      work_types: ["spec"]
+    method: manual
+    pass_condition: >
+      Changes to spec files have human approval documented.
+    evidence:
+      type: approval_log
+      save_to: "reports/latest/approval.md"
+    related_constraints: [CON-042]
+
+  # ============================================================
+  # SECURITY (CHK-S*): Security requirements
+  # ============================================================
+  - id: CHK-S01
+    title: No secrets in code
+    category: security
+    severity: blocker
+    trigger:
+      file_patterns: ["*"]
+      work_types: ["all"]
+    method: auto
+    pass_condition: >
+      No API keys, passwords, tokens, or secrets appear in any file.
+    evidence:
+      type: grep_result
+      save_to: "reports/latest/secrets_scan.txt"
+    related_constraints: [CON-050]
+
+  - id: CHK-S02
+    title: Inputs are sanitized
+    category: security
+    severity: blocker
+    trigger:
+      file_patterns: ["*.py", "*.ts", "*.js"]
+      work_types: ["code"]
+    method: llm
+    pass_condition: >
+      User inputs are validated/sanitized before use in commands,
+      queries, or templates.
+    evidence:
+      type: code_review
+      save_to: "reports/latest/input_sanitization.md"
+    related_constraints: [CON-051]
+
+  # ============================================================
+  # OUTPUT (CHK-O*): Agent output quality
+  # ============================================================
+  - id: CHK-O01
+    title: Output at fixed path
+    category: output
+    severity: blocker
+    trigger:
+      file_patterns: ["ops/RUNS/*/02_outputs/*"]
+      work_types: ["all"]
+    method: auto
+    pass_condition: >
+      Agent outputs are saved to the exact paths specified in prompts.
+    evidence:
+      type: file_exists
+      save_to: "reports/latest/output_paths.txt"
+    related_constraints: [CON-060]
+
+  - id: CHK-O02
+    title: Output follows format
+    category: output
+    severity: blocker
+    trigger:
+      file_patterns: ["ops/RUNS/*/02_outputs/*.md"]
+      work_types: ["all"]
+    method: llm
+    pass_condition: >
+      Agent outputs contain all required sections as defined in prompts.
+    evidence:
+      type: format_check
+      save_to: "reports/latest/format_check.md"
+    related_constraints: [CON-061]
+
+  - id: CHK-O03
+    title: No TODO-only stubs
+    category: output
+    severity: major
+    trigger:
+      file_patterns: ["*.py", "*.ts", "*.cpp", "*.md"]
+      work_types: ["code", "docs"]
+    method: auto
+    pass_condition: >
+      No files contain only TODO markers without implementation.
+    evidence:
+      type: todo_scan
+      save_to: "reports/latest/todo_scan.txt"
+    related_constraints: [CON-062]
+
+  # ============================================================
+  # TESTING (CHK-T*): Test coverage
+  # ============================================================
+  - id: CHK-T01
+    title: New code has tests
+    category: testing
+    severity: major
+    trigger:
+      file_patterns: ["src/**/*.py", "src/**/*.ts"]
+      work_types: ["code"]
+    method: auto
+    pass_condition: >
+      New functions/classes have corresponding test files.
+    evidence:
+      type: test_mapping
+      save_to: "reports/latest/test_coverage.txt"
+    related_constraints: []
+
+  - id: CHK-T02
+    title: Tests pass
+    category: testing
+    severity: blocker
+    trigger:
+      file_patterns: ["tests/**/*"]
+      work_types: ["code"]
+    method: auto
+    pass_condition: >
+      All tests pass (exit code 0).
+    evidence:
+      type: test_log
+      save_to: "reports/latest/test_results.txt"
+    related_constraints: []
+
+  - id: CHK-T03
+    title: No test skips without reason
+    category: testing
+    severity: minor
+    trigger:
+      file_patterns: ["tests/**/*"]
+      work_types: ["code"]
+    method: auto
+    pass_condition: >
+      Any skipped tests have documented reasons.
+    evidence:
+      type: skip_scan
+      save_to: "reports/latest/test_skips.txt"
+    related_constraints: []
+
+  # ============================================================
+  # DOCUMENTATION (CHK-D*): Documentation quality
+  # ============================================================
+  - id: CHK-D01
+    title: Functions have docstrings
+    category: documentation
+    severity: minor
+    trigger:
+      file_patterns: ["*.py"]
+      work_types: ["code"]
+    method: auto
+    pass_condition: >
+      Public functions and classes have docstrings.
+    evidence:
+      type: lint_report
+      save_to: "reports/latest/docstring_check.txt"
+    related_constraints: []
+
+  - id: CHK-D02
+    title: README is current
+    category: documentation
+    severity: minor
+    trigger:
+      file_patterns: ["README.md"]
+      work_types: ["docs"]
+    method: llm
+    pass_condition: >
+      README reflects current project state (no stale instructions).
+    evidence:
+      type: review
+      save_to: "reports/latest/readme_review.md"
+    related_constraints: []

@@ -1,0 +1,14 @@
+{
+    "gate": "ci",
+    "level": "L1",
+    "run": null,
+    "timestamp": null,
+    "status": null,
+    "checks": [],
+    "blockers": [],
+    "majors": [],
+    "minors": [],
+    "build_log": null,
+    "test_log": null,
+    "summary": "Template - replace with actual gate results"
+}

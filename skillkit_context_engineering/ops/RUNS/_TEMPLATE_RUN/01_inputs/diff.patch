@@ -1,0 +1,17 @@
+# Input: diff.patch
+
+> **Purpose**: Place git diff or patch files here for reference.
+
+To generate:
+```bash
+git diff > skillkit_context_engineering/ops/RUNS/<run>/01_inputs/diff.patch
+```
+
+Or for staged changes:
+```bash
+git diff --staged > skillkit_context_engineering/ops/RUNS/<run>/01_inputs/diff.patch
+```
+
+---
+
+(Paste or generate diff content here)

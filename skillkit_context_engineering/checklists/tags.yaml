@@ -1,0 +1,58 @@
+# Tags
+# Maps tags to checklist IDs for quick filtering.
+
+metadata:
+  version: "1.0.0"
+  description: "Tag-to-checklist mapping"
+
+tags:
+  evidence:
+    description: "Evidence and citation checks"
+    items: [CHK-E01, CHK-E02, CHK-E03, CHK-E04]
+    
+  contract:
+    description: "Interface and API contract checks"
+    items: [CHK-C01, CHK-C02, CHK-C03, CHK-C04]
+    
+  reproducibility:
+    description: "Reproducibility checks"
+    items: [CHK-R01, CHK-R02, CHK-R03, CHK-R04]
+    
+  logic:
+    description: "Logical consistency checks"
+    items: [CHK-L01, CHK-L02, CHK-L03, CHK-L04]
+    
+  change:
+    description: "Change management checks"
+    items: [CHK-X01, CHK-X02, CHK-X03]
+    
+  security:
+    description: "Security checks"
+    items: [CHK-S01, CHK-S02]
+    
+  output:
+    description: "Agent output checks"
+    items: [CHK-O01, CHK-O02, CHK-O03]
+    
+  testing:
+    description: "Test coverage checks"
+    items: [CHK-T01, CHK-T02, CHK-T03]
+    
+  documentation:
+    description: "Documentation quality checks"
+    items: [CHK-D01, CHK-D02]
+    
+  # Severity tags
+  blocker:
+    description: "BLOCKER severity items"
+    items: [CHK-E01, CHK-E02, CHK-C01, CHK-R01, CHK-L01, CHK-L02, 
+            CHK-X01, CHK-S01, CHK-S02, CHK-O01, CHK-O02, CHK-T02]
+    
+  major:
+    description: "MAJOR severity items"
+    items: [CHK-E03, CHK-E04, CHK-C02, CHK-C03, CHK-R02, CHK-R04,
+            CHK-L03, CHK-L04, CHK-X02, CHK-X03, CHK-O03, CHK-T01]
+    
+  minor:
+    description: "MINOR severity items"
+    items: [CHK-C04, CHK-R03, CHK-T03, CHK-D01, CHK-D02]

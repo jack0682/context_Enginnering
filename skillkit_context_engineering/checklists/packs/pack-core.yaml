@@ -1,0 +1,316 @@
+# Pack: Core
+# Essential checks that apply to ALL work types.
+# These are the non-negotiable minimums.
+# EVERY run must pass these checks before proceeding.
+
+metadata:
+  name: pack-core
+  version: "1.0.0"
+  description: "Essential checks for all work types — the non-negotiable minimums"
+  severity_filter: [blocker, major]
+  estimated_time: "5-10 minutes"
+  required_for: ["all work types"]
+
+# ============================================================
+# INCLUDED CHECKS — The Core 11
+# ============================================================
+
+include_items:
+  # -------------------------
+  # EVIDENCE (2 items)
+  # -------------------------
+  - id: CHK-E01
+    execution:
+      method: llm
+      instruction: |
+        Scan all markdown files in the current run's outputs for numeric claims.
+        For each numeric claim (percentage, count, measurement, metric), verify
+        there is an accompanying source reference (file path, command output, or citation).
+      command: |
+        grep -rn -E "[0-9]+(\.[0-9]+)?%|[0-9]+ (seconds|ms|minutes|hours|items|users|requests)" \
+          skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/
+      pass_if: "Every match has a source in the same paragraph or following line"
+      fail_action: "BLOCKER — Stop and add sources before proceeding"
+    
+  - id: CHK-E02
+    execution:
+      method: llm
+      instruction: |
+        Scan for factual claims about external systems, libraries, or research.
+        Each must have a citation in format [SOURCE] or (Source, Year) or URL.
+      command: |
+        # Look for factual patterns without citations
+        grep -rn -E "(according to|research shows|studies indicate|documentation states)" \
+          skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/
+      pass_if: "Each factual claim has citation within 1 sentence"
+      fail_action: "BLOCKER — Add citations before proceeding"
+
+  # -------------------------
+  # CONTRACT (1 item)
+  # -------------------------
+  - id: CHK-C01
+    execution:
+      method: manual
+      instruction: |
+        If this task changes any public interface (function signature, API endpoint,
+        schema field), verify that spec/02_interfaces.md was updated BEFORE code changes.
+      check_steps:
+        - "1. Review codex_plan.md for interface changes"
+        - "2. If any found, check git log for 02_interfaces.md"
+        - "3. Verify interface doc change predates code change"
+      command: |
+        # Check if interfaces doc was modified
+        git log --oneline -5 skillkit_context_engineering/spec/02_interfaces.md
+      pass_if: "No interface changes OR interfaces doc updated first"
+      fail_action: "BLOCKER — Update interfaces doc before code"
+
+  # -------------------------
+  # REPRODUCIBILITY (1 item)
+  # -------------------------
+  - id: CHK-R01
+    execution:
+      method: llm
+      instruction: |
+        Scan claude_impl.md for any actions described. Each action must be
+        expressed as a command, not a manual step.
+      check_for:
+        - "Phrases like 'manually edited', 'I changed', 'clicked on'"
+        - "These indicate non-reproducible actions"
+      command: |
+        grep -i -E "(manually|by hand|clicked|dragged)" \
+          skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/claude_impl.md
+      pass_if: "No matches OR matches are in quoted error messages only"
+      fail_action: "BLOCKER — Convert manual actions to commands"
+
+  # -------------------------
+  # LOGIC (2 items)
+  # -------------------------
+  - id: CHK-L01
+    execution:
+      method: llm
+      instruction: |
+        Scan all outputs for abbreviations and technical terms.
+        Each must be defined in glossary or on first use.
+      check_steps:
+        - "1. Extract all abbreviations (2+ capital letters)"
+        - "2. Extract technical terms (italicized or in backticks)"
+        - "3. Verify each appears in spec/03_glossary.md OR is defined on first use"
+      command: |
+        # Find potential undefined terms
+        grep -oE '\b[A-Z]{2,}\b' skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/*.md | \
+          sort -u
+      pass_if: "All terms are in glossary or defined inline"
+      fail_action: "BLOCKER — Add definitions to glossary"
+
+  - id: CHK-L02
+    execution:
+      method: llm
+      instruction: |
+        Check for logical contradictions within and across output documents.
+        Common contradictions:
+        - "X is required" vs "X is optional"
+        - "Always do Y" vs "Never do Y"
+        - Conflicting version numbers or dates
+      command: |
+        # Look for potential contradiction patterns
+        grep -rn -E "(must|always|never|required|forbidden)" \
+          skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/
+      pass_if: "No contradictory statements found"
+      fail_action: "BLOCKER — Resolve contradictions before proceeding"
+
+  # -------------------------
+  # CHANGE (1 item)
+  # -------------------------
+  - id: CHK-X01
+    execution:
+      method: manual
+      instruction: |
+        If this change affects 3+ modules/files, verify the casefile contains
+        an impact analysis section.
+      check_steps:
+        - "1. Count affected files in codex_plan.md"
+        - "2. If 3+, open 00_casefile.md"
+        - "3. Verify 'Impact Analysis' or 'Scope' section exists"
+      pass_if: "<3 files affected OR impact analysis present"
+      fail_action: "BLOCKER — Add impact analysis to casefile"
+
+  # -------------------------
+  # SECURITY (1 item)
+  # -------------------------
+  - id: CHK-S01
+    execution:
+      method: auto
+      instruction: |
+        Scan entire repository for hardcoded secrets.
+      command: |
+        # Comprehensive secrets scan
+        grep -rn --include="*.py" --include="*.ts" --include="*.js" --include="*.yaml" \
+          -E "(api_key|apikey|password|secret|token|credential|private_key)\s*[=:]\s*['\"][^'\"]{8,}['\"]" \
+          . 2>/dev/null | grep -v test | grep -v example | head -10
+      pass_if: "Command returns empty (exit code 1)"
+      fail_action: "BLOCKER — Remove secrets, use environment variables"
+      remediation: |
+        1. Replace hardcoded secret with: os.getenv("SECRET_NAME")
+        2. Add SECRET_NAME to .env.example (without value)
+        3. Document in README
+
+  # -------------------------
+  # OUTPUT (2 items)
+  # -------------------------
+  - id: CHK-O01
+    execution:
+      method: auto
+      instruction: |
+        Verify all required output files exist at correct paths.
+      command: |
+        # Check required files exist
+        test -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/gemini_analysis.md" && \
+        test -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/codex_plan.md" && \
+        test -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/claude_impl.md" && \
+        echo "PASS: All output files present" || echo "FAIL: Missing output files"
+      pass_if: "All three output files exist"
+      fail_action: "BLOCKER — Complete missing agent phases"
+
+  - id: CHK-O02
+    execution:
+      method: llm
+      instruction: |
+        Verify each output file contains all required sections as defined in prompts.
+      check_gemini:
+        required_sections:
+          - "## 1. Request Summary"
+          - "## 2. Architectural Impact"
+          - "## 3. Constraints Check"
+          - "## 4. High-Level Design"
+          - "## 8. Handoff to Codex"
+      check_codex:
+        required_sections:
+          - "## 2. File Changes"
+          - "## 4. Implementation Details"
+          - "## 5. Dependency Order"
+          - "## 8. Handoff to Claude"
+      check_claude:
+        required_sections:
+          - "## 1. Pre-Change Scan"
+          - "## 2. Changes Applied"
+          - "## 3. Evidence Collection"
+          - "## 7. Checklist Sign-off"
+      command: |
+        # Check for required headers
+        for file in gemini_analysis.md codex_plan.md claude_impl.md; do
+          echo "=== Checking $file ==="
+          grep "^## " skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/$file
+        done
+      pass_if: "All required sections present in each file"
+      fail_action: "BLOCKER — Re-run agent with correct format"
+
+  # -------------------------
+  # TESTING (1 item)
+  # -------------------------
+  - id: CHK-T02
+    execution:
+      method: auto
+      instruction: |
+        Run project tests and verify all pass.
+      command: |
+        # Run tests (adapt to your project)
+        pytest tests/ -v --tb=short 2>&1 | tee skillkit_context_engineering/ops/RUNS/$RUN_NAME/01_inputs/test.log
+        echo "Exit code: $?"
+      pass_if: "Exit code 0 (all tests pass)"
+      fail_action: "BLOCKER — Fix failing tests before proceeding"
+      fallback: |
+        If no tests exist:
+        1. Document in notes: "No tests available"
+        2. Mark as PASS with note
+        3. Add CHK-T01 (tests required) to backlog
+
+# ============================================================
+# EXECUTION ORDER
+# ============================================================
+
+execution_order:
+  phase_1_fast:
+    description: "Fast automated checks — run first"
+    items: [CHK-S01, CHK-O01]
+    estimated_time: "< 30 seconds"
+    
+  phase_2_format:
+    description: "Format checks — run second"
+    items: [CHK-O02]
+    estimated_time: "1 minute"
+    
+  phase_3_content:
+    description: "Content checks — run third"
+    items: [CHK-E01, CHK-E02, CHK-L01, CHK-L02, CHK-R01]
+    estimated_time: "3-5 minutes"
+    
+  phase_4_process:
+    description: "Process checks — run last"
+    items: [CHK-C01, CHK-X01, CHK-T02]
+    estimated_time: "2-3 minutes"
+
+# ============================================================
+# EXECUTION SCRIPT
+# ============================================================
+
+execution_script: |
+  #!/bin/bash
+  # Run this script to execute pack-core checks
+  # Usage: ./run_pack_core.sh <RUN_NAME>
+  
+  RUN_NAME=${1:-"REQUIRED"}
+  if [ "$RUN_NAME" == "REQUIRED" ]; then
+    echo "Usage: $0 <RUN_NAME>"
+    exit 1
+  fi
+  
+  REPORT_FILE="skillkit_context_engineering/reports/latest/pack_core_results.json"
+  
+  echo "{"
+  echo "  \"pack\": \"pack-core\","
+  echo "  \"run\": \"$RUN_NAME\","
+  echo "  \"timestamp\": \"$(date -Iseconds)\","
+  echo "  \"results\": {"
+  
+  # CHK-S01: Secrets scan
+  SECRETS=$(grep -rn --include="*.py" --include="*.ts" \
+    -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}['\"]" . 2>/dev/null | \
+    grep -v test | wc -l)
+  echo "    \"CHK-S01\": { \"status\": \"$([ $SECRETS -eq 0 ] && echo PASS || echo FAIL)\" },"
+  
+  # CHK-O01: Output files exist
+  if [ -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/gemini_analysis.md" ] && \
+     [ -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/codex_plan.md" ] && \
+     [ -f "skillkit_context_engineering/ops/RUNS/$RUN_NAME/02_outputs/claude_impl.md" ]; then
+    echo "    \"CHK-O01\": { \"status\": \"PASS\" },"
+  else
+    echo "    \"CHK-O01\": { \"status\": \"FAIL\" },"
+  fi
+  
+  # CHK-T02: Tests pass
+  if pytest tests/ -v --tb=short > /dev/null 2>&1; then
+    echo "    \"CHK-T02\": { \"status\": \"PASS\" }"
+  else
+    echo "    \"CHK-T02\": { \"status\": \"FAIL\" }"
+  fi
+  
+  echo "  }"
+  echo "}"
+
+# ============================================================
+# SUMMARY
+# ============================================================
+
+summary:
+  total_items: 11
+  blockers: 11
+  majors: 0
+  coverage:
+    evidence: 2
+    contract: 1
+    reproducibility: 1
+    logic: 2
+    change: 1
+    security: 1
+    output: 2
+    testing: 1

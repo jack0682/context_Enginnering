@@ -1,0 +1,44 @@
+# Pack: ROS2
+# Checks for ROS2 robotics development.
+
+metadata:
+  name: pack-ros2
+  version: "1.0.0"
+  description: "Checks for ROS2 robotics code"
+  severity_filter: [blocker, major]
+
+include_items:
+  # Core (always)
+  - CHK-E01  # Numeric claims have data source
+  - CHK-C01  # Interface docs updated before code
+  - CHK-R01  # All actions are commands
+  - CHK-L01  # Terms are defined
+  - CHK-S01  # No secrets in code
+  - CHK-O01  # Output at fixed path
+  - CHK-T02  # Tests pass
+  
+  # Contract (ROS interfaces)
+  - CHK-C02  # Breaking changes bump major version
+  - CHK-C03  # New interfaces have examples
+  
+  # Reproducibility (environment critical)
+  - CHK-R02  # Environment is documented
+  - CHK-R04  # Dependencies are locked
+  
+  # Logic
+  - CHK-L03  # No circular dependencies
+  
+  # Change
+  - CHK-X02  # Rollback plan exists
+  
+  # Testing
+  - CHK-T01  # New code has tests
+
+total_items: 14
+blockers: 7
+majors: 7
+
+# ROS2-specific notes:
+# - Interfaces include .msg, .srv, .action files
+# - Environment means ROS_DISTRO, colcon workspace
+# - Dependencies include rosdep and package.xml
