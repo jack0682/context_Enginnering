@@ -6,7 +6,7 @@ This kit enables consistent, high-quality development using a **Gemini → Codex
 
 ## Quick Start
 
-1. **Read**: [OPERATOR_GUIDE.md](.skillkit_context_engineering/OPERATOR_GUIDE.md) (the complete procedure)
+1. **Read**: [OPERATOR_GUIDE.md](./skillkit_context_engineering/OPERATOR_GUIDE.md) (the complete procedure)
 2. **Create a Run**: Copy `ops/RUNS/_TEMPLATE_RUN` to `ops/RUNS/YYYY-MM-DD__task-name/`
 3. **Execute**: Follow the 3-CLI workflow in the Operator Guide
 
